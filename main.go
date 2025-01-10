@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"sync/atomic"
 )
@@ -31,6 +33,7 @@ func main() {
 	serveMux.HandleFunc("GET /api/healthz", handlerReadiness)
 	serveMux.HandleFunc("GET /admin/metrics", apiCfg.handlerFileserverHits)
 	serveMux.HandleFunc("POST /admin/reset", apiCfg.handlerFileserverHitsReset)
+	serveMux.HandleFunc("POST /api/validate_chirp", handlerValidateChirp)
 
 	server := http.Server{
 		Addr:    ":" + port,
@@ -47,6 +50,67 @@ func handlerReadiness(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(http.StatusText(http.StatusOK)))
+}
+
+func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
+	type chirp struct {
+		Body string `json:"body"`
+	}
+	type responseSuccess struct {
+		Valid bool `json:"valid"`
+	}
+	type responseFailure struct {
+		Error string `json:"error"`
+	}
+	handleError := func(w http.ResponseWriter, err error, description string, statusCode int) {
+		// Log if server error
+		if err != nil {
+			log.Printf("%s: %s", description, err)
+		} else {
+			log.Printf("%s", description)
+		}
+
+		// Attempt to create formated error message
+		data, err := json.Marshal(responseFailure{
+			Error: fmt.Sprintf("%s: %s", description, err),
+		})
+
+		// Just error out if fail to create formatted error message
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Printf("Error marshalling JSON: %s", err)
+			return
+		}
+
+		// Write formatted error to response
+		w.WriteHeader(statusCode)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(data)
+	}
+
+	// Attempt to validate input json
+	decoder := json.NewDecoder(r.Body)
+	test := chirp{}
+	err := decoder.Decode(&test)
+
+	if err != nil {
+		handleError(w, err, "Error decoding chirp", http.StatusInternalServerError)
+		return
+	}
+	if len(test.Body) > 140 {
+		handleError(w, nil, "Chirp is too long", http.StatusBadRequest)
+	}
+
+	data, err := json.Marshal(responseSuccess{
+		Valid: true,
+	})
+	if err != nil {
+		handleError(w, err, "Error marshalling response", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
 }
 
 func (cfg *apiConfig) handlerFileserverHitsReset(w http.ResponseWriter, r *http.Request) {
