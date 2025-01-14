@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"sync/atomic"
 
 	"github.com/joho/godotenv"
+	"github.com/jthughes/chirpynetwork/internal/auth"
 	"github.com/jthughes/chirpynetwork/internal/database"
 	_ "github.com/lib/pq"
 )
@@ -59,6 +61,8 @@ func main() {
 	serveMux.HandleFunc("GET /api/chirps", apiCfg.handlerGetAllChirps)
 	serveMux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.handlerGetChirpByID)
 
+	serveMux.HandleFunc("POST /api/login", apiCfg.handlerLogin)
+
 	server := http.Server{
 		Addr:    ":" + port,
 		Handler: serveMux,
@@ -68,6 +72,33 @@ func main() {
 		fmt.Printf("Failed to start server: %s\n", err)
 		return
 	}
+}
+
+func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
+	type request struct {
+		Password string `json:"password"`
+		Email    string `json:"email"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	test := request{}
+	err := decoder.Decode(&test)
+	if err != nil {
+		ResponseError(w, err, "Error decoding login request", http.StatusInternalServerError)
+		return
+	}
+
+	dbUser, err := cfg.db.GetUserByEmail(context.Background(), test.Email)
+	if err == nil {
+		err = auth.CheckPasswordHash(test.Password, dbUser.HashedPassword)
+	}
+	if err != nil {
+		ResponseError(w, nil, "Incorrect email or password", http.StatusUnauthorized)
+		return
+	}
+	user := dbUserToUser(dbUser)
+	data, err := json.Marshal(user)
+	SetJSONResponse(w, http.StatusOK, data, err)
 }
 
 func handlerReadiness(w http.ResponseWriter, r *http.Request) {
@@ -81,15 +112,17 @@ func ResponseError(w http.ResponseWriter, err error, description string, statusC
 		Error string `json:"error"`
 	}
 	// Log if server error
+	var error_msg string
 	if err != nil {
-		log.Printf("%s: %s", description, err)
+		error_msg = fmt.Sprintf("%s: %s", description, err)
 	} else {
-		log.Printf("%s", description)
+		error_msg = description
 	}
+	log.Println(error_msg)
 
 	// Attempt to create formated error message
 	data, err := json.Marshal(responseFailure{
-		Error: fmt.Sprintf("%s: %s", description, err),
+		Error: error_msg,
 	})
 
 	// Just error out if fail to create formatted error message

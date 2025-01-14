@@ -7,9 +7,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jthughes/chirpynetwork/internal/auth"
 	"github.com/jthughes/chirpynetwork/internal/database"
 )
 
+// handlerLogin expects this to not have a copy of Password
 type User struct {
 	ID        uuid.UUID `json:"id"`
 	CreatedAt time.Time `json:"created_at"`
@@ -28,7 +30,8 @@ func dbUserToUser(dbUser database.User) User {
 
 func (cfg *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) {
 	type request struct {
-		Email string `json:"email"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 
 	// Attempt to validate input json
@@ -39,8 +42,15 @@ func (cfg *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) 
 		ResponseError(w, err, "Error decoding chirp", http.StatusInternalServerError)
 		return
 	}
-
-	dbUser, err := cfg.db.CreateUser(context.Background(), test.Email)
+	hashed_password, err := auth.HashPassword(test.Password)
+	if err != nil {
+		ResponseError(w, err, "Error hashing password", http.StatusInternalServerError)
+		return
+	}
+	dbUser, err := cfg.db.CreateUser(context.Background(), database.CreateUserParams{
+		Email:          test.Email,
+		HashedPassword: hashed_password,
+	})
 	if err != nil {
 		ResponseError(w, err, "Error creating user", http.StatusInternalServerError)
 		return
