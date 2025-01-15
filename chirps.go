@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jthughes/chirpynetwork/internal/auth"
 	"github.com/jthughes/chirpynetwork/internal/database"
 )
 
@@ -74,8 +75,7 @@ func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 
 func (cfg *apiConfig) handlerNewChirp(w http.ResponseWriter, r *http.Request) {
 	type request struct {
-		Body   string    `json:"body"`
-		UserId uuid.UUID `json:"user_id"`
+		Body string `json:"body"`
 	}
 
 	// Attempt to validate input json
@@ -87,7 +87,18 @@ func (cfg *apiConfig) handlerNewChirp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := cfg.db.GetUserById(context.Background(), test.UserId)
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		ResponseError(w, err, "Invalid token", http.StatusUnauthorized)
+		return
+	}
+	userId, err := auth.ValidateJWT(token, cfg.secretKey)
+	if err != nil {
+		ResponseError(w, err, "Invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	user, err := cfg.db.GetUserById(context.Background(), userId)
 	if err != nil {
 		ResponseError(w, nil, "User does not exist", http.StatusBadRequest)
 		return

@@ -1,15 +1,20 @@
 package auth
 
-import "golang.org/x/crypto/bcrypt"
+import (
+	"fmt"
+	"net/http"
+	"strings"
+)
 
-func HashPassword(password string) (string, error) {
-	hashed, err := bcrypt.GenerateFromPassword([]byte(password), 12)
-	if err != nil {
-		return "", err
+func GetBearerToken(headers http.Header) (string, error) {
+	auth_header := headers.Get("Authorization")
+	if auth_header == "" {
+		return "", fmt.Errorf("missing authorization header")
 	}
-	return string(hashed), nil
-}
-
-func CheckPasswordHash(password, hash string) error {
-	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	slice := strings.Split(auth_header, " ")
+	fmt.Println(len(slice), slice[0])
+	if len(slice) != 2 && slice[0] != "Bearer" {
+		return "", fmt.Errorf("invalid authorization header")
+	}
+	return slice[1], nil
 }
