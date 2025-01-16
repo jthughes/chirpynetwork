@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jthughes/chirpynetwork/internal/auth"
 	"github.com/jthughes/chirpynetwork/internal/database"
 )
 
@@ -78,23 +77,17 @@ func (cfg *apiConfig) handlerNewChirp(w http.ResponseWriter, r *http.Request) {
 		Body string `json:"body"`
 	}
 
-	// Attempt to validate input json
-	decoder := json.NewDecoder(r.Body)
-	test := request{}
-	err := decoder.Decode(&test)
+	userId, err := cfg.authenticateRequest(r)
 	if err != nil {
-		ResponseError(w, err, "Error decoding chirp", http.StatusInternalServerError)
+		ResponseError(w, err, "Invalid token", http.StatusUnauthorized)
 		return
 	}
 
-	token, err := auth.GetBearerToken(r.Header)
+	decoder := json.NewDecoder(r.Body)
+	test := request{}
+	err = decoder.Decode(&test)
 	if err != nil {
-		ResponseError(w, err, "Invalid token", http.StatusUnauthorized)
-		return
-	}
-	userId, err := auth.ValidateJWT(token, cfg.secretKey)
-	if err != nil {
-		ResponseError(w, err, "Invalid token", http.StatusUnauthorized)
+		ResponseError(w, err, "Error decoding chirp", http.StatusInternalServerError)
 		return
 	}
 

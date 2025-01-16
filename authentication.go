@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -11,6 +12,33 @@ import (
 	"github.com/jthughes/chirpynetwork/internal/auth"
 	"github.com/jthughes/chirpynetwork/internal/database"
 )
+
+func (cfg *apiConfig) authenticateRequest(r *http.Request) (uuid.UUID, error) {
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		return uuid.UUID{}, fmt.Errorf("access token not found")
+	}
+	userId, err := auth.ValidateJWT(token, cfg.secretKey)
+	if err != nil {
+		return uuid.UUID{}, fmt.Errorf("invalid access token")
+	}
+	return userId, nil
+}
+
+func (cfg *apiConfig) authenticateRefresh(r *http.Request) (string, uuid.UUID, error) {
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		return "", uuid.UUID{}, fmt.Errorf("invalid authorization header")
+	}
+	dbToken, err := cfg.db.GetRefreshToken(r.Context(), token)
+	if err != nil {
+		return "", uuid.UUID{}, fmt.Errorf("refresh token not found")
+	}
+	if dbToken.ExpiresAt.Before(time.Now()) || dbToken.RevokedAt.Valid {
+		return "", uuid.UUID{}, fmt.Errorf("refresh token expired")
+	}
+	return dbToken.Token, dbToken.UserID, nil
+}
 
 func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	type request struct {
@@ -89,22 +117,14 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) handlerRefresh(w http.ResponseWriter, r *http.Request) {
-	token, err := auth.GetBearerToken(r.Header)
+
+	_, userID, err := cfg.authenticateRefresh(r)
 	if err != nil {
-		ResponseError(w, err, "Authorization token not found", http.StatusUnauthorized)
-		return
-	}
-	dbToken, err := cfg.db.GetRefreshToken(r.Context(), token)
-	if err != nil {
-		ResponseError(w, err, "Unable to retrieve refresh token from db", http.StatusUnauthorized)
-		return
-	}
-	if dbToken.ExpiresAt.Before(time.Now()) || dbToken.RevokedAt.Valid {
-		ResponseError(w, err, "Refresh token expired", http.StatusUnauthorized)
+		ResponseError(w, err, "Invalid refresh token", http.StatusUnauthorized)
 		return
 	}
 
-	accessToken, err := auth.MakeAccessToken(dbToken.UserID, cfg.secretKey)
+	accessToken, err := auth.MakeAccessToken(userID, cfg.secretKey)
 	if err != nil {
 		ResponseError(w, err, "Error creating authentication token", http.StatusInternalServerError)
 		return
@@ -120,19 +140,14 @@ func (cfg *apiConfig) handlerRefresh(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) handlerRevoke(w http.ResponseWriter, r *http.Request) {
-	token, err := auth.GetBearerToken(r.Header)
+	token, _, err := cfg.authenticateRefresh(r)
 	if err != nil {
-		ResponseError(w, err, "Authorization token not found", http.StatusNotFound)
-		return
-	}
-	dbToken, err := cfg.db.GetRefreshToken(r.Context(), token)
-	if err != nil {
-		ResponseError(w, err, "Unable to retrieve refresh token from db", http.StatusNotFound)
+		ResponseError(w, err, "Invalid refresh token", http.StatusNotFound)
 		return
 	}
 
 	_, err = cfg.db.RevokeRefreshToken(context.Background(), database.RevokeRefreshTokenParams{
-		Token: dbToken.Token,
+		Token: token,
 		RevokedAt: sql.NullTime{
 			Time:  time.Now(),
 			Valid: true,
