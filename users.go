@@ -66,10 +66,16 @@ func (cfg *apiConfig) handlerUpdateLogin(w http.ResponseWriter, r *http.Request)
 		Password string `json:"password"`
 	}
 
+	userID, err := cfg.authenticateRequest(r)
+	if err != nil {
+		ResponseError(w, err, "User not authenticated", http.StatusUnauthorized)
+		return
+	}
+
 	// Attempt to validate input json
 	decoder := json.NewDecoder(r.Body)
 	test := request{}
-	err := decoder.Decode(&test)
+	err = decoder.Decode(&test)
 	if err != nil {
 		ResponseError(w, err, "Error decoding chirp", http.StatusInternalServerError)
 		return
@@ -79,17 +85,20 @@ func (cfg *apiConfig) handlerUpdateLogin(w http.ResponseWriter, r *http.Request)
 		ResponseError(w, err, "Error hashing password", http.StatusInternalServerError)
 		return
 	}
-	dbUser, err := cfg.db.CreateUser(context.Background(), database.CreateUserParams{
+
+	dbUser, err := cfg.db.UpdateUser(context.Background(), database.UpdateUserParams{
+		ID:             userID,
 		Email:          test.Email,
 		HashedPassword: hashed_password,
 	})
 	if err != nil {
-		ResponseError(w, err, "Error creating user", http.StatusInternalServerError)
+		ResponseError(w, err, "Error updating user", http.StatusInternalServerError)
 		return
 	}
+
 	user := dbUserToUser(dbUser)
 	data, err := json.Marshal(user)
-	SetJSONResponse(w, http.StatusCreated, data, err)
+	SetJSONResponse(w, http.StatusOK, data, err)
 }
 
 func (cfg *apiConfig) handlerResetUsers(w http.ResponseWriter, r *http.Request) {
