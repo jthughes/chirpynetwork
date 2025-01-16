@@ -4,8 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"slices"
-	"strings"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,48 +27,6 @@ func dbChirpToChirp(dbChirp database.Chirp) Chirp {
 		Body:      dbChirp.Body,
 		UserId:    dbChirp.UserID,
 	}
-}
-
-func clean_message(message string) string {
-	profane := []string{"kerfuffle", "sharbert", "fornax"}
-	words := strings.Split(message, " ")
-	cleaned := []string{}
-	for _, word := range words {
-		if slices.Contains(profane, strings.ToLower(word)) {
-			cleaned = append(cleaned, "****")
-		} else {
-			cleaned = append(cleaned, word)
-		}
-	}
-	return strings.Join(cleaned, " ")
-}
-
-func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
-	type request struct {
-		Body string `json:"body"`
-	}
-	type responseSuccess struct {
-		CleanedBody string `json:"cleaned_body"`
-	}
-
-	// Attempt to validate input json
-	decoder := json.NewDecoder(r.Body)
-	test := request{}
-	err := decoder.Decode(&test)
-	if err != nil {
-		ResponseError(w, err, "Error decoding chirp", http.StatusInternalServerError)
-		return
-	}
-
-	if len(test.Body) > 140 {
-		ResponseError(w, nil, "Chirp is too long", http.StatusBadRequest)
-		return
-	}
-
-	data, err := json.Marshal(responseSuccess{
-		CleanedBody: clean_message(test.Body),
-	})
-	SetJSONResponse(w, http.StatusOK, data, err)
 }
 
 func (cfg *apiConfig) handlerNewChirp(w http.ResponseWriter, r *http.Request) {
@@ -120,11 +77,31 @@ func (cfg *apiConfig) handlerNewChirp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) handlerGetAllChirps(w http.ResponseWriter, r *http.Request) {
+	author := r.URL.Query().Get("author_id")
 
-	chirps, err := cfg.db.GetAllChirps(context.Background())
-	if err != nil {
-		ResponseError(w, err, "Error retrieving chirps", http.StatusInternalServerError)
-		return
+	var chirps []database.Chirp
+	var err error
+	if author == "" {
+		chirps, err = cfg.db.GetAllChirps(context.Background())
+		if err != nil {
+			ResponseError(w, err, "Error retrieving chirps", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		authorID, err := uuid.Parse(author)
+		if err != nil {
+			ResponseError(w, err, "Error parsing author id", http.StatusBadRequest)
+		}
+		chirps, err = cfg.db.GetAllChirpsFromAuthor(context.Background(), authorID)
+		if err != nil {
+			ResponseError(w, err, "Error retrieving chirps", http.StatusNotFound)
+			return
+		}
+	}
+
+	sortDir := r.URL.Query().Get("sort")
+	if sortDir == "desc" {
+		sort.Slice(chirps, func(i, j int) bool { return chirps[i].CreatedAt.After(chirps[j].CreatedAt) })
 	}
 
 	out := []Chirp{}

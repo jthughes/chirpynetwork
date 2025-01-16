@@ -129,12 +129,6 @@ func SetJSONResponse(w http.ResponseWriter, statusCode int, jsonData []byte, err
 	w.Write(jsonData)
 }
 
-func (cfg *apiConfig) handlerFileserverHitsReset(w http.ResponseWriter, r *http.Request) {
-	cfg.fileserverHits.Store(0)
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Hits reset to 0"))
-}
-
 func (cfg *apiConfig) handlerFileserverHits(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)

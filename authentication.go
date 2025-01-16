@@ -73,10 +73,6 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 
 	// Create refresh token
 	refreshExpiry := 60 * 24 * time.Hour
-	if err != nil {
-		ResponseError(w, err, "Error setting refresh expiry", http.StatusInternalServerError)
-		return
-	}
 	refreshTokenString, err := auth.MakeRefreshToken()
 	if err != nil {
 		ResponseError(w, err, "Error creating refresh token", http.StatusInternalServerError)
