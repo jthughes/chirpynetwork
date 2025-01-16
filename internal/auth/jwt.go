@@ -1,12 +1,19 @@
 package auth
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
+
+func MakeAccessToken(userID uuid.UUID, tokenSecret string) (string, error) {
+	accessExpiry := time.Hour
+	return MakeJWT(userID, tokenSecret, accessExpiry)
+}
 
 func MakeJWT(userID uuid.UUID, tokenSecret string, expiresIn time.Duration) (string, error) {
 	now := time.Now().UTC()
@@ -66,4 +73,14 @@ func ValidateJWT(tokenString, tokenSecret string) (uuid.UUID, error) {
 		return uuid.UUID{}, fmt.Errorf("failed to parse subject into uuid: %v", err)
 	}
 	return id, nil
+}
+
+func MakeRefreshToken() (string, error) {
+	data := [32]byte{}
+	_, err := rand.Read(data[:])
+	if err != nil {
+		return "", err
+	}
+	token := hex.EncodeToString(data[:])
+	return token, nil
 }
