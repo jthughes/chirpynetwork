@@ -138,13 +138,13 @@ func (cfg *apiConfig) handlerGetAllChirps(w http.ResponseWriter, r *http.Request
 
 func (cfg *apiConfig) handlerGetChirpByID(w http.ResponseWriter, r *http.Request) {
 
-	requestUserID, err := uuid.Parse(r.PathValue("chirpID"))
+	requestChirpID, err := uuid.Parse(r.PathValue("chirpID"))
 	if err != nil {
 		ResponseError(w, err, "Error parsing chirp id", http.StatusBadRequest)
 		return
 	}
 
-	dbChirp, err := cfg.db.GetChirpByID(context.Background(), requestUserID)
+	dbChirp, err := cfg.db.GetChirpByID(context.Background(), requestChirpID)
 	if err != nil {
 		ResponseError(w, err, "Chirp ID not found", http.StatusNotFound)
 		return
@@ -153,4 +153,38 @@ func (cfg *apiConfig) handlerGetChirpByID(w http.ResponseWriter, r *http.Request
 	chirp := dbChirpToChirp(dbChirp)
 	data, err := json.Marshal(chirp)
 	SetJSONResponse(w, http.StatusOK, data, err)
+}
+
+func (cfg *apiConfig) handlerDeleteChirp(w http.ResponseWriter, r *http.Request) {
+
+	userID, err := cfg.authenticateRequest(r)
+	if err != nil {
+		ResponseError(w, err, "User not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	chirpID, err := uuid.Parse(r.PathValue("chirpID"))
+	if err != nil {
+		ResponseError(w, err, "Error parsing chirp id", http.StatusBadRequest)
+		return
+	}
+
+	dbChirp, err := cfg.db.GetChirpByID(context.Background(), chirpID)
+	if err != nil {
+		ResponseError(w, err, "Chirp ID not found", http.StatusNotFound)
+		return
+	}
+
+	if dbChirp.UserID != userID {
+		ResponseError(w, err, "User not authorized", http.StatusForbidden)
+		return
+	}
+
+	err = cfg.db.DeleteChirp(context.Background(), chirpID)
+	if err != nil {
+		ResponseError(w, err, "Error deleting chirp", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
