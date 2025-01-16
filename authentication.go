@@ -97,19 +97,13 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 
 	// Build response
 	type response struct {
-		ID           uuid.UUID `json:"id"`
-		CreatedAt    time.Time `json:"created_at"`
-		UpdatedAt    time.Time `json:"updated_at"`
-		Email        string    `json:"email"`
-		AccessToken  string    `json:"token"`
-		RefreshToken string    `json:"refresh_token"`
+		User
+		AccessToken  string `json:"token"`
+		RefreshToken string `json:"refresh_token"`
 	}
 
 	data, err := json.Marshal(response{
-		ID:           dbUser.ID,
-		CreatedAt:    dbUser.CreatedAt,
-		UpdatedAt:    dbUser.UpdatedAt,
-		Email:        dbUser.Email,
+		User:         dbUserToUser(dbUser),
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken.Token,
 	})

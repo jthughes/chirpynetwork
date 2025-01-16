@@ -19,6 +19,7 @@ type apiConfig struct {
 	db             *database.Queries
 	platform       string
 	secretKey      string
+	polkaKey       string
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -45,6 +46,7 @@ func main() {
 		db:             database.New(db),
 		platform:       os.Getenv("PLATFORM"),
 		secretKey:      os.Getenv("SECRET_KEY"),
+		polkaKey:       os.Getenv("POLKA_KEY"),
 	}
 	serveMux := http.NewServeMux()
 	handler := apiCfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(filepathRoot))))
@@ -66,6 +68,8 @@ func main() {
 	serveMux.HandleFunc("POST /api/login", apiCfg.handlerLogin)
 	serveMux.HandleFunc("POST /api/refresh", apiCfg.handlerRefresh)
 	serveMux.HandleFunc("POST /api/revoke", apiCfg.handlerRevoke)
+
+	serveMux.HandleFunc("POST /api/polka/webhooks", apiCfg.handlerWebhookPolkaUpgraded)
 
 	server := http.Server{
 		Addr:    ":" + port,
