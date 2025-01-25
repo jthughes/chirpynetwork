@@ -30,9 +30,17 @@ func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 		})
 }
 
+func getEnv(key string, fallback string) string {
+	value, exists := os.LookupEnv(key)
+	if exists {
+		return value
+	}
+	return fallback
+}
+
 func main() {
 	const filepathRoot = "."
-	const port = "8080"
+	port := getEnv("PORT", "8080")
 
 	godotenv.Load()
 	dbURL := os.Getenv("DB_URL")
