@@ -84,7 +84,7 @@ func (cfg *apiConfig) handlerGetAllChirps(w http.ResponseWriter, r *http.Request
 	if author == "" {
 		chirps, err = cfg.db.GetAllChirps(context.Background())
 		if err != nil {
-			ResponseError(w, err, "Error retrieving chirps", http.StatusInternalServerError)
+			ResponseError(w, err, "Error retrieving chirps", http.StatusNotFound)
 			return
 		}
 	} else {
